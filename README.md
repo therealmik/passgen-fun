@@ -15,7 +15,7 @@ and most successful classes of security tools.
 
 As such, it's important to make sure you do this properly - people who
 are using your tool are people who have gone to extra effort to provide
-for their own security, and if you do this incorrectly, you have really
+for their own security, and if you do this incorrectly you have really
 let them down.
 
 Some simple things you should look out for:

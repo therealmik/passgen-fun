@@ -6,7 +6,8 @@ Generate all possible pwgen phonemes (the default mode)
 This is a recursive generator function that tries to generate all
 possible pwgen phonemes, along with their probabilities.
 
-FIXME: The probabilities are probably wrong
+FIXME: The sum of all probabilities is 0.0236533250995308
+FIXME: Satoo9 and fohNg5 are not generated!!!
 """ 
 
 import operator

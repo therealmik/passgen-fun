@@ -1,0 +1,8 @@
+CREATE TABLE pwgen (
+	password TEXT NOT NULL,
+	probability DOUBLE PRECISION NOT NULL
+);
+CREATE INDEX pwgen_password_idx ON pwgen(password);
+.separator "\t"
+.import /dev/stdin pwgen
+

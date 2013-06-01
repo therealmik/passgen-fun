@@ -66,9 +66,9 @@ charset = [
 	("z", CONSONANT, 1.0/64),
 ]
 
-def generate_pwgen(sofar="", first=True, should_be=VOWEL|CONSONANT, prev=0, feature_flags=NUMBER|UPPER, pw_flags=NUMBER|UPPER, probability=1.0):
+def generate_pwgen(sofar="", first=True, should_be=VOWEL|CONSONANT, prev=0, probability=1.0, generated_upper=False, generated_number=False):
 	if len(sofar) == PASSWORD_LENGTH:
-		if feature_flags == 0:
+		if generated_upper and generated_number:
 			yield (sofar, probability)
 		return
 	if len(sofar) > PASSWORD_LENGTH:
@@ -79,41 +79,36 @@ def generate_pwgen(sofar="", first=True, should_be=VOWEL|CONSONANT, prev=0, feat
 	for(x, flags, p) in charset:
 		if flags & should_be == 0:
 			continue
-		if prev & VOWEL != 0 and flags & VOWEL|DIPTHONG != 0:
+		if prev & VOWEL != 0 and flags & (VOWEL|DIPTHONG) != 0:
 			continue
 
 		if flags & CONSONANT != 0:
-			p *= 0.5
-			next_level.append((p, (sofar+x, False, VOWEL, flags, feature_flags, pw_flags)))
-			if pw_flags & UPPER != 0:
-				next_level.append((p*0.25, (sofar+x.capitalize(), False, VOWEL, flags, feature_flags & (~UPPER), pw_flags)))
+			next_level.append((sofar+x, False, VOWEL, flags, probability*p, generated_upper, generated_number))
+			next_level.append((sofar+x.capitalize(), False, VOWEL, flags, probability*p*0.25, True, generated_number))
 		else:
-			p *= 0.5
-			cp = p # CONSONANT probability
+			cp = p # probability for when we generate consonants
 
-			if first and pw_flags & UPPER != 0:
-				next_level.append((p*0.25, (sofar+x.capitalize(), False, CONSONANT, flags, feature_flags & (~UPPER), pw_flags)))
-			if prev & VOWEL == 0 and flags & DIPTHONG == 0:
-				cp *= 0.5 # or 0.4 without the bias
-				next_level.append((p, (sofar+x, False, VOWEL, flags, feature_flags, pw_flags)))
-				if first and pw_flags & UPPER != 0:
-					next_level.append((p*0.25, (sofar+x.capitalize(), False, VOWEL, flags, feature_flags & (~UPPER), pw_flags)))
-			next_level.append((cp, (sofar+x, False, CONSONANT, flags, feature_flags, pw_flags)))
+			if first:
+				next_level.append((sofar+x.capitalize(), False, CONSONANT, flags, probability*p*0.25, True, generated_number))
+			if prev & VOWEL != 0 or flags & DIPTHONG != 0:
+				next_level.append((sofar+x, False, CONSONANT, flags, probability*p, generated_upper, generated_number))
+			else:
+				next_level.append((sofar+x, False, VOWEL, flags, probability*p, generated_upper, generated_number))
+				next_level.append((sofar+x, False, CONSONANT, flags, probability*p*0.5, generated_upper, generated_number))
 
-	if pw_flags & NUMBER != 0 and not first:
+	if not first:
 		for x, p in [(str(x), 2.0/16) for x in range(0, 6)] + [(str(x), 1.0/16) for x in range(6, 10)]:
-			next_level.append((p*0.375, (sofar+x, True, VOWEL|CONSONANT, 0, feature_flags & (~NUMBER), pw_flags)))
+			next_level.append((sofar+x, True, VOWEL|CONSONANT, 0, probability*p*0.375, generated_upper, True))
 
-	next_level.sort(key=operator.itemgetter(0), reverse=True)
-	for (p, args) in next_level:
-		for y in generate_pwgen(*args, probability=probability*p):
+	next_level.sort(key=operator.itemgetter(4), reverse=True)
+	for args in next_level:
+		for y in generate_pwgen(*args):
 			yield y
 
 if __name__ == "__main__":
 	import sys
 
 	count = 0
-	print("\copy pwgen from pstdin with delimiter '\t'")
 	for (x, probability) in generate_pwgen():
 		count += 1
 		print(x + "\t" + str(probability))

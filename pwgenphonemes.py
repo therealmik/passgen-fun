@@ -9,22 +9,7 @@ possible pwgen phonemes, along with their probabilities.
 FIXME: The probabilities are almost certainly wrong (eg. won't add up to 1)
 TODO: Merge duplicate branches
 
-A full run with 6 chars produced 1532036600 possibilities
-
-Some are still missing that shouldn't be:
-Aa4Yah
-ley9Ao
-Au5hoo
-Oi9UR0
-goa2Eu
-eiH5Iu
-Uav5ie
-eiL5Ao
-Uun2Fe
-Eu1zae
-hah1Oa
-Iokai3
-Uacah0
+A full run with 6 chars produced 1124226450 possibilities
 """ 
 
 import operator
@@ -35,10 +20,7 @@ CONSONANT = 1
 VOWEL = 2
 DIPTHONG = 4
 NOT_FIRST = 8
-
-UPPER=1
-NUMBER=2
-SYMBOL=4
+NUMBER=16
 
 charset = [
 	("a", VOWEL, 2.0/64),
@@ -81,152 +63,101 @@ charset = [
 	("x", CONSONANT, 1.0/64),
 	("y", CONSONANT, 1.0/64),
 	("z", CONSONANT, 1.0/64),
-]
+] + [(str(x), NUMBER, 2.0/16) for x in range(0, 6)] + [(str(x), NUMBER, 1.0/16) for x in range(6, 10)]
 
-def generate_first(sofar="", probability=1.0, generated_upper=False, generated_number=False):
-	"""Generate a first char.  This means either the first char, or after a number."""
-	### BOILERPLATE ###
-	if len(sofar) == PASSWORD_LENGTH:
-		if generated_upper and generated_number:
-			yield (sofar, probability)
-		return
-	if len(sofar) > PASSWORD_LENGTH:
-		return
+class Possibility(object):
+	def __init__(self, flags, probability, next_state, upper=False):
+		self.flags = flags
+		self.probability = probability
+		self.next_state = next_state
+		self.upper = upper
 
-	next_level = []
-	### END BOILERPLATE ###
+	def __iter__(self):
+		for (c, f, p) in charset:
+			if f == self.flags:
+				if self.upper:
+					yield (c.capitalize(), f, p*self.probability)
+				else:
+					yield (c, f, p*self.probability)
+		
+class State(object):
+	def __init__(self, sofar="", probability=1.0, generated_upper=False, generated_number=False):
+		self.sofar = sofar
+		self.probability = probability
+		self.generated_upper = generated_upper
+		self.generated_number = generated_number
 
-	for(x, flags, p) in charset:
-		if flags & NOT_FIRST != 0:
-			continue
+	def __iter__(self):
+		if len(self.sofar) == PASSWORD_LENGTH:
+			if self.generated_upper and self.generated_number:
+				yield (self.sofar, self.probability)
+			return
+		if len(self.sofar) > PASSWORD_LENGTH:
+			return
 
-		if flags & CONSONANT != 0:
-			next_level.append([probability*p,	generate_vowel(sofar + x, flags, probability*p, generated_upper, generated_number)])
-			next_level.append([probability*p*0.25,	generate_vowel(sofar + x.capitalize(), flags, probability*p*0.25, True, generated_number)])
-		else: # flags & VOWEL != 0:
-			next_level.append([probability*p*0.25,	generate_consonant(sofar+x.capitalize(), flags, probability*p*0.25, True, generated_number)])
-			if flags & DIPTHONG != 0:
-				next_level.append([probability*p,	generate_consonant(sofar+x, flags, probability*p, generated_upper, generated_number)])
-			else:
-				next_level.append([probability*p,	generate_vowel(sofar+x, flags, probability*p, generated_upper, generated_number)])
-				next_level.append([probability*p*0.5,	generate_consonant(sofar+x, flags, probability*p*0.5, generated_upper, generated_number)])
+		for possibility in self.possibilities:
+			for (c, f, p) in sorted(iter(possibility), key=operator.itemgetter(2), reverse=True):
+				s = possibility.next_state(self.sofar+c, p, self.generated_upper or possibility.upper, self.generated_number or f == NUMBER)
+				yield from iter(s)
 
-	### BOILERPLATE ###
-	next_level.sort(key=operator.itemgetter(0), reverse=True)
-	for _, gen in next_level:
-		for y in gen:
-			yield y
-	### END BOILERPLATE ###
+class s_first(State):
+	pass
 
-def generate_consonant(sofar, prev, probability, generated_upper, generated_number):
-	### BOILERPLATE ###
-	if len(sofar) == PASSWORD_LENGTH:
-		if generated_upper and generated_number:
-			yield (sofar, probability)
-		return
-	if len(sofar) > PASSWORD_LENGTH:
-		return
+class s_after_consonant(State):
+	pass
 
-	next_level = []
-	### END BOILERPLATE ###
+class s_after_vowel(State):
+	pass
 
-	for(x, flags, p) in charset:
-		if flags & CONSONANT == 0:
-			continue
-		next_level.append([probability*p,	generate_vowel(sofar + x, flags, probability*p, generated_upper, generated_number)])
-		next_level.append([probability*p*0.25,	generate_vowel(sofar + x.capitalize(), flags, probability*p*0.25, True, generated_number)])
+class s_after_double_vowel(State):
+	pass
 
-	for x, p in [(str(x), 2.0/16) for x in range(0, 6)] + [(str(x), 1.0/16) for x in range(6, 10)]:
-		next_level.append([probability*p*0.375,	generate_first(sofar+x, probability*p*0.375, generated_upper, True)])
+s_first.possibilities = [
+		Possibility(CONSONANT, 0.5, s_after_consonant),
+		Possibility(CONSONANT|DIPTHONG, 0.5, s_after_consonant),
+		Possibility(VOWEL, 0.5, s_after_vowel),
+		Possibility(VOWEL|DIPTHONG, 0.5, s_after_double_vowel),
+		Possibility(CONSONANT, 0.5 * 0.25, s_after_consonant, True),
+		Possibility(CONSONANT|DIPTHONG, 0.5 * 0.25, s_after_consonant, True),
+		Possibility(VOWEL, 0.5 * 0.25, s_after_vowel, True),
+		Possibility(VOWEL|DIPTHONG, 0.5 * 0.25, s_after_double_vowel, True),
+	]
 
-	### BOILERPLATE ###
-	next_level.sort(key=operator.itemgetter(0), reverse=True)
-	for _, gen in next_level:
-		for y in gen:
-			yield y
-	### END BOILERPLATE ###
+s_after_consonant.possibilities = [
+		Possibility(VOWEL, 0.625, s_after_vowel),
+		Possibility(VOWEL|DIPTHONG, 0.625, s_after_double_vowel),
+		Possibility(NUMBER, 0.375, s_first),
+	]
 
-def generate_vowel(sofar, prev, probability, generated_upper, generated_number):
-	### BOILERPLATE ###
-	if len(sofar) == PASSWORD_LENGTH:
-		if generated_upper and generated_number:
-			yield (sofar, probability)
-		return
-	if len(sofar) > PASSWORD_LENGTH:
-		return
+s_after_vowel.possibilities = [
+		Possibility(CONSONANT, 0.25, s_after_consonant),
+		Possibility(CONSONANT|DIPTHONG, 0.25, s_after_consonant),
+		Possibility(CONSONANT|DIPTHONG|NOT_FIRST, 0.25, s_after_consonant),
+		Possibility(CONSONANT, 0.125, s_after_consonant, True),
+		Possibility(CONSONANT|DIPTHONG, 0.125, s_after_consonant, True),
+		Possibility(CONSONANT|DIPTHONG|NOT_FIRST, 0.125, s_after_consonant, True),
+		Possibility(VOWEL, 0.625, s_after_double_vowel),
+		Possibility(NUMBER, 0.375, s_first),
+	]
 
-	next_level = []
-	### END BOILERPLATE ###
-
-	for(x, flags, p) in charset:
-		if flags & VOWEL == 0:
-			continue
-		if prev & VOWEL != 0 or flags & DIPTHONG != 0:
-			next_level.append([probability*p,	generate_consonant(sofar + x, flags, probability*p, generated_upper, generated_number)])
-		else:
-			next_level.append([probability*p,	generate_vowel(sofar + x, flags, probability*p, generated_upper, generated_number)])
-			next_level.append([probability*p*0.5,	generate_consonant(sofar + x, flags, probability*p*0.5, generated_upper, generated_number)])
-
-	for x, p in [(str(x), 2.0/16) for x in range(0, 6)] + [(str(x), 1.0/16) for x in range(6, 10)]:
-		next_level.append([probability*p*0.375,	generate_first(sofar+x, probability*p*0.375, generated_upper, True)])
-
-	### BOILERPLATE ###
-	next_level.sort(key=operator.itemgetter(0), reverse=True)
-	for _, gen in next_level:
-		for y in gen:
-			yield y
-	### END BOILERPLATE ###
-
-def generate_pwgen(sofar="", first=True, should_be=VOWEL|CONSONANT, prev=0, probability=1.0, generated_upper=False, generated_number=False):
-	"""Original generator func - don't use"""
-	if len(sofar) == PASSWORD_LENGTH:
-		if generated_upper and generated_number:
-			yield (sofar, probability)
-		return
-	if len(sofar) > PASSWORD_LENGTH:
-		return
-
-	next_level = []
-
-	for(x, flags, p) in charset:
-		if flags & should_be == 0:
-			continue
-		if first and flags & NOT_FIRST != 0:
-			continue
-		if prev & VOWEL != 0 and flags & VOWEL != 0 and flags & DIPTHONG != 0:
-			continue
-
-		if flags & CONSONANT != 0:
-			next_level.append((sofar+x, False, VOWEL, flags, probability*p, generated_upper, generated_number))
-			next_level.append((sofar+x.capitalize(), False, VOWEL, flags, probability*p*0.25, True, generated_number))
-		else:
-			if first:
-				next_level.append((sofar+x.capitalize(), False, CONSONANT, flags, probability*p*0.25, True, generated_number))
-			if prev & VOWEL != 0 or flags & DIPTHONG != 0:
-				next_level.append((sofar+x, False, CONSONANT, flags, probability*p, generated_upper, generated_number))
-			else:
-				next_level.append((sofar+x, False, VOWEL, flags, probability*p, generated_upper, generated_number))
-				next_level.append((sofar+x, False, CONSONANT, flags, probability*p*0.5, generated_upper, generated_number))
-
-	if not first:
-		for x, p in [(str(x), 2.0/16) for x in range(0, 6)] + [(str(x), 1.0/16) for x in range(6, 10)]:
-			next_level.append((sofar+x, True, VOWEL|CONSONANT, 0, probability*p*0.375, generated_upper, True))
-
-	next_level.sort(key=operator.itemgetter(4), reverse=True)
-	for args in next_level:
-		for y in generate_pwgen(*args):
-			yield y
+s_after_double_vowel.possibilities = [
+		Possibility(CONSONANT, 0.25, s_after_consonant),
+		Possibility(CONSONANT|DIPTHONG, 0.25, s_after_consonant),
+		Possibility(CONSONANT|DIPTHONG|NOT_FIRST, 0.25, s_after_consonant),
+		Possibility(CONSONANT, 0.125, s_after_consonant, True),
+		Possibility(CONSONANT|DIPTHONG, 0.125, s_after_consonant, True),
+		Possibility(CONSONANT|DIPTHONG|NOT_FIRST, 0.125, s_after_consonant, True),
+		Possibility(NUMBER, 0.375, s_first),
+	]
 
 if __name__ == "__main__":
 	import sys
 
 	count = 0
-	for (x, probability) in generate_first():
+	for (x, probability) in iter(s_first()):
 		count += 1
 		print(x) # + "\t" + str(probability))
 		if count % 10000000 == 0:
 			print("Generated {0:d}...".format(count), file=sys.stderr)
-			sys.stderr.flush()
 	print("Completed, total={0:d}...".format(count), file=sys.stderr)
-	sys.stderr.flush()
 

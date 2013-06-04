@@ -14,6 +14,8 @@ A full run with 6 chars produced 1124226450 possibilities
 
 import operator
 
+UPPER_CHARS="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
 PASSWORD_LENGTH=6
 
 CONSONANT = 1
@@ -76,9 +78,9 @@ charset.extend([CharsetItem(str(x), NUMBER, 2.0/16) for x in range(0, 6)])
 charset.extend([CharsetItem(str(x), NUMBER, 1.0/16) for x in range(6, 10)])
 
 class Possibility(object):
-	def __init__(self, flags, probability, next_state, upper=False):
+	def __init__(self, flags, weight, next_state, upper=False):
 		self.flags = flags
-		self.probability = probability
+		self.weight = weight
 		self.next_state = next_state
 		self.upper = upper
 
@@ -89,7 +91,7 @@ class Possibility(object):
 			c = item.c
 			if self.upper:
 				c = c.capitalize()
-			yield (item.c, item.flags, item.weight*wFactor*self.probability)
+			yield (c, item.flags, item.weight*wFactor*self.weight)
 		
 	@property
 	def numchars(self):
@@ -114,8 +116,8 @@ class State(object):
 			return
 
 		for possibility in self.possibilities:
-			for (c, f, p) in sorted(iter(possibility), key=operator.itemgetter(2), reverse=True):
-				s = possibility.next_state(self.sofar+c, p, self.generated_upper or possibility.upper, self.generated_number or f == NUMBER)
+			for (c, flags, weight) in iter(possibility):
+				s = possibility.next_state(self.sofar+c, self.probability * weight, (self.generated_upper or possibility.upper), (self.generated_number or flags == NUMBER))
 				yield from iter(s)
 
 	def combinations(self, combinations=1, length=0, haveUpper=False, haveNumber=False):
@@ -196,6 +198,9 @@ s_after_double_vowel.possibilities = [
 	Possibility(NUMBER, 0.375, s_first),
 ]
 
+for s in (s_first, s_after_consonant, s_after_vowel, s_after_double_vowel):
+	assert(sum([p.weight for p in s.possibilities]) == 1.0)
+	
 if __name__ == "__main__":
 	import sys
 
@@ -207,7 +212,7 @@ if __name__ == "__main__":
 	count = 0
 	for (x, probability) in iter(s_first()):
 		count += 1
-		print(x) # + "\t" + str(probability))
+		print(x + "\t" + str(probability))
 		if count % pct == 0:
 			print("Generated {0:d} ({1:d}%)...".format(count, count // pct), file=sys.stderr)
 	print("Completed, total={0:d}...".format(count), file=sys.stderr)

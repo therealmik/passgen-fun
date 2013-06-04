@@ -80,6 +80,13 @@ class Possibility(object):
 				else:
 					yield (c, f, p*self.probability)
 		
+	@property
+	def numchars(self):
+		if self.flags & DIPTHONG != 0:
+			return 2
+		else:
+			return 1
+
 class State(object):
 	def __init__(self, sofar="", probability=1.0, generated_upper=False, generated_number=False):
 		self.sofar = sofar
@@ -100,6 +107,22 @@ class State(object):
 				s = possibility.next_state(self.sofar+c, p, self.generated_upper or possibility.upper, self.generated_number or f == NUMBER)
 				yield from iter(s)
 
+	def combinations(self, combinations=1, length=0, haveUpper=False, haveNumber=False):
+		if length == PASSWORD_LENGTH:
+			if haveUpper and haveNumber:
+				yield combinations
+			else:
+				yield 0
+			return
+		elif length > PASSWORD_LENGTH:
+			yield 0
+			return
+
+		for p in self.possibilities:
+			c = len(list(iter(p)))
+			s = p.next_state("x" * length)
+			yield sum(s.combinations(c, length + p.numchars, haveUpper or p.upper, haveNumber or p.flags == NUMBER)) * combinations
+			
 class s_first(State):
 	pass
 
@@ -153,11 +176,17 @@ s_after_double_vowel.possibilities = [
 if __name__ == "__main__":
 	import sys
 
+	total = sum(s_first().combinations())
+	pct = total // 100
+
+	print("Generating {0:d} phonemes".format(total), file=sys.stderr)
+
 	count = 0
 	for (x, probability) in iter(s_first()):
 		count += 1
 		print(x) # + "\t" + str(probability))
-		if count % 10000000 == 0:
-			print("Generated {0:d}...".format(count), file=sys.stderr)
+		if count % pct == 0:
+			print("Generated {0:d} ({1:d}%)...".format(count, count // pct), file=sys.stderr)
 	print("Completed, total={0:d}...".format(count), file=sys.stderr)
+
 

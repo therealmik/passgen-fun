@@ -16,16 +16,15 @@ import operator
 import numpy
 import sys
 import itertools
+import heapq
 
-PASSWORD_LENGTH=6
+PASSWORD_LENGTH=8
 
 CONSONANT = 1
 VOWEL = 2
 DIPTHONG = 4
 NOT_FIRST = 8
 NUMBER=16
-
-THRESHOLD=numpy.float128(1.0/(PASSWORD_LENGTH ** 26))
 
 class CharsetItem(tuple):
 	def __new__(cls, c, flags, weight):
@@ -103,38 +102,42 @@ class Possibility(object):
 		else:
 			return 1
 
-def _key(i):
-	return i[0][0]
-
-def sorted_merge(iterators):
-	ilist = []
-	for i in iterators:
-		try:
-			ilist.append([next(i), i])
-		except StopIteration:
-			pass
-
-	while len(ilist) > 0:
-		ilist.sort(key=operator.itemgetter(0), reverse=True)
-		(item, i) = ilist.pop(-1)
-		yield item
-		try:
-			ilist.append([next(i), i])
-		except StopIteration:
-			pass
-
 def uniqify(iterators):
-	lastItem = None
-	p = numpy.float128(0.0)
+	it = heapq.merge(*iterators)
 
-	for item in sorted_merge(iterators):
+	(lastItem, p) = next(it)
+
+	for item in it:
 		if item[0] == lastItem:
 			p += item[1]
 		else:
-			if p > 0.0: # THRESHOLD:
+			if lastItem is not None:
 				yield (lastItem, p)
 			lastItem = item[0]
 			p = item[1]
+
+class Result(tuple):
+	def __new__(cls, password, probability):
+		return tuple.__new__(cls, (password, probability))
+
+	password = property(operator.itemgetter(0))
+	probability = property(operator.itemgetter(1))
+
+	def __lt__(self, item):
+		# FIXME: Make the sort order more awesome
+		return self.password < item.password
+
+	def __gt__(self, item):
+		# FIXME: Make the sort order more awesome
+		return self.password > item.password
+
+	def __eq__(self, item):
+		return self.password == item.password
+
+	def __ne__(self, item):
+		return self.password != item.password
+
+
 
 class State(object):
 	def __init__(self, sofar="", probability=1.0, generated_upper=False, generated_number=False):
@@ -146,7 +149,7 @@ class State(object):
 	def __iter__(self):
 		if len(self.sofar) == PASSWORD_LENGTH:
 			if self.generated_upper and self.generated_number:
-				yield (self.sofar, self.probability)
+				yield Result(self.sofar, self.probability)
 			return
 		if len(self.sofar) > PASSWORD_LENGTH:
 			return
@@ -197,41 +200,41 @@ class s_after_double_vowel(State):
 	pass
 
 s_first.possibilities = [
-	Possibility(CONSONANT,		joint_weight(CONSONANT, CONSONANT|DIPTHONG) * 0.5 * 0.75, s_after_consonant),
-	Possibility(CONSONANT|DIPTHONG,	joint_weight(CONSONANT|DIPTHONG, CONSONANT) * 0.5 * 0.75, s_after_consonant),
-	Possibility(VOWEL,		joint_weight(VOWEL, VOWEL|DIPTHONG) * 0.5 * 0.75, s_after_vowel),
 	Possibility(VOWEL|DIPTHONG,	joint_weight(VOWEL|DIPTHONG, VOWEL) * 0.5 * 0.75, s_after_double_vowel),
-	Possibility(CONSONANT,		joint_weight(CONSONANT, CONSONANT|DIPTHONG) * 0.5 * 0.25, s_after_consonant, True),
-	Possibility(CONSONANT|DIPTHONG,	joint_weight(CONSONANT|DIPTHONG, CONSONANT) * 0.5 * 0.25, s_after_consonant, True),
-	Possibility(VOWEL,		joint_weight(VOWEL, VOWEL|DIPTHONG) * 0.5 * 0.25, s_after_vowel, True),
+	Possibility(VOWEL,		joint_weight(VOWEL, VOWEL|DIPTHONG) * 0.5 * 0.75, s_after_vowel),
 	Possibility(VOWEL|DIPTHONG,	joint_weight(VOWEL|DIPTHONG, VOWEL) * 0.5 * 0.25, s_after_double_vowel, True),
+	Possibility(VOWEL,		joint_weight(VOWEL, VOWEL|DIPTHONG) * 0.5 * 0.25, s_after_vowel, True),
+	Possibility(CONSONANT|DIPTHONG,	joint_weight(CONSONANT|DIPTHONG, CONSONANT) * 0.5 * 0.75, s_after_consonant),
+	Possibility(CONSONANT,		joint_weight(CONSONANT, CONSONANT|DIPTHONG) * 0.5 * 0.75, s_after_consonant),
+	Possibility(CONSONANT|DIPTHONG,	joint_weight(CONSONANT|DIPTHONG, CONSONANT) * 0.5 * 0.25, s_after_consonant, True),
+	Possibility(CONSONANT,		joint_weight(CONSONANT, CONSONANT|DIPTHONG) * 0.5 * 0.25, s_after_consonant, True),
 ]
 
 s_after_consonant.possibilities = [
-	Possibility(VOWEL,		joint_weight(VOWEL, VOWEL|DIPTHONG) * 0.625, s_after_vowel),
 	Possibility(VOWEL|DIPTHONG,	joint_weight(VOWEL|DIPTHONG, VOWEL) * 0.625, s_after_double_vowel),
+	Possibility(VOWEL,		joint_weight(VOWEL, VOWEL|DIPTHONG) * 0.625, s_after_vowel),
 	Possibility(NUMBER,		0.375, s_first),
 ]
 
 s_after_vowel.possibilities = [
-	Possibility(CONSONANT,				joint_weight(CONSONANT, CONSONANT|DIPTHONG, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.75 * 0.75, s_after_consonant),
-	Possibility(CONSONANT|DIPTHONG, 		joint_weight(CONSONANT|DIPTHONG, CONSONANT, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.75 * 0.75, s_after_consonant),
-	Possibility(CONSONANT|DIPTHONG|NOT_FIRST, 	joint_weight(CONSONANT|DIPTHONG|NOT_FIRST, CONSONANT|DIPTHONG, CONSONANT) * 0.625 * 0.75 * 0.75, s_after_consonant),
-	Possibility(CONSONANT,				joint_weight(CONSONANT, CONSONANT|DIPTHONG, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.75 * 0.25, s_after_consonant, True),
-	Possibility(CONSONANT|DIPTHONG, 		joint_weight(CONSONANT|DIPTHONG, CONSONANT, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.75 * 0.25, s_after_consonant, True),
-	Possibility(CONSONANT|DIPTHONG|NOT_FIRST, 	joint_weight(CONSONANT|DIPTHONG|NOT_FIRST, CONSONANT|DIPTHONG, CONSONANT) * 0.625 * 0.75 * 0.25, s_after_consonant, True),
 	Possibility(VOWEL, 0.625 * 0.25, s_after_double_vowel),
 	Possibility(NUMBER, 0.375, s_first),
+	Possibility(CONSONANT|DIPTHONG, 		joint_weight(CONSONANT|DIPTHONG, CONSONANT, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.75 * 0.75, s_after_consonant),
+	Possibility(CONSONANT,				joint_weight(CONSONANT, CONSONANT|DIPTHONG, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.75 * 0.75, s_after_consonant),
+	Possibility(CONSONANT|DIPTHONG|NOT_FIRST, 	joint_weight(CONSONANT|DIPTHONG|NOT_FIRST, CONSONANT|DIPTHONG, CONSONANT) * 0.625 * 0.75 * 0.75, s_after_consonant),
+	Possibility(CONSONANT|DIPTHONG, 		joint_weight(CONSONANT|DIPTHONG, CONSONANT, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.75 * 0.25, s_after_consonant, True),
+	Possibility(CONSONANT,				joint_weight(CONSONANT, CONSONANT|DIPTHONG, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.75 * 0.25, s_after_consonant, True),
+	Possibility(CONSONANT|DIPTHONG|NOT_FIRST, 	joint_weight(CONSONANT|DIPTHONG|NOT_FIRST, CONSONANT|DIPTHONG, CONSONANT) * 0.625 * 0.75 * 0.25, s_after_consonant, True),
 ]
 
 s_after_double_vowel.possibilities = [
+	Possibility(NUMBER, 0.375, s_first),
 	Possibility(CONSONANT,				joint_weight(CONSONANT, CONSONANT|DIPTHONG, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.75, s_after_consonant),
 	Possibility(CONSONANT|DIPTHONG,			joint_weight(CONSONANT|DIPTHONG, CONSONANT, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.75, s_after_consonant),
 	Possibility(CONSONANT|DIPTHONG|NOT_FIRST,	joint_weight(CONSONANT|DIPTHONG|NOT_FIRST, CONSONANT, CONSONANT|DIPTHONG) * 0.625 * 0.75, s_after_consonant),
 	Possibility(CONSONANT,				joint_weight(CONSONANT, CONSONANT|DIPTHONG, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.25, s_after_consonant, True),
 	Possibility(CONSONANT|DIPTHONG,			joint_weight(CONSONANT|DIPTHONG, CONSONANT, CONSONANT|DIPTHONG|NOT_FIRST) * 0.625 * 0.25, s_after_consonant, True),
 	Possibility(CONSONANT|DIPTHONG|NOT_FIRST,	joint_weight(CONSONANT|DIPTHONG|NOT_FIRST, CONSONANT, CONSONANT|DIPTHONG) * 0.625 * 0.25, s_after_consonant, True),
-	Possibility(NUMBER, 0.375, s_first),
 ]
 
 for s in (s_first, s_after_consonant, s_after_vowel, s_after_double_vowel):
@@ -242,7 +245,6 @@ if __name__ == "__main__":
 
 	total = sum(s_first().combinations())
 	pct = total // 100
-	THRESHOLD=numpy.float128(1.0/total)
 
 	print("Generating {0:d} phonemes".format(total), file=sys.stderr)
 

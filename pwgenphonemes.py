@@ -13,8 +13,9 @@ A full run with 6 chars produced 1124226450 possibilities
 """ 
 
 import operator
-
-UPPER_CHARS="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+import numpy
+import sys
+import itertools
 
 PASSWORD_LENGTH=6
 
@@ -24,9 +25,11 @@ DIPTHONG = 4
 NOT_FIRST = 8
 NUMBER=16
 
+THRESHOLD=numpy.float128(1.0/(PASSWORD_LENGTH ** 26))
+
 class CharsetItem(tuple):
 	def __new__(cls, c, flags, weight):
-		return tuple.__new__(cls, (c, flags, weight))
+		return tuple.__new__(cls, (c, flags, numpy.float128(weight)))
 
 	c = property(operator.itemgetter(0))
 	flags = property(operator.itemgetter(1))
@@ -80,7 +83,7 @@ charset.extend([CharsetItem(str(x), NUMBER, 1.0/16) for x in range(6, 10)])
 class Possibility(object):
 	def __init__(self, flags, weight, next_state, upper=False):
 		self.flags = flags
-		self.weight = weight
+		self.weight = numpy.float128(weight)
 		self.next_state = next_state
 		self.upper = upper
 
@@ -100,10 +103,43 @@ class Possibility(object):
 		else:
 			return 1
 
+def _key(i):
+	return i[0][0]
+
+def sorted_merge(iterators):
+	ilist = []
+	for i in iterators:
+		try:
+			ilist.append([next(i), i])
+		except StopIteration:
+			pass
+
+	while len(ilist) > 0:
+		ilist.sort(key=operator.itemgetter(0), reverse=True)
+		(item, i) = ilist.pop(-1)
+		yield item
+		try:
+			ilist.append([next(i), i])
+		except StopIteration:
+			pass
+
+def uniqify(iterators):
+	lastItem = None
+	p = numpy.float128(0.0)
+
+	for item in sorted_merge(iterators):
+		if item[0] == lastItem:
+			p += item[1]
+		else:
+			if p > 0.0: # THRESHOLD:
+				yield (lastItem, p)
+			lastItem = item[0]
+			p = item[1]
+
 class State(object):
 	def __init__(self, sofar="", probability=1.0, generated_upper=False, generated_number=False):
 		self.sofar = sofar
-		self.probability = probability
+		self.probability = numpy.float128(probability)
 		self.generated_upper = generated_upper
 		self.generated_number = generated_number
 
@@ -116,9 +152,9 @@ class State(object):
 			return
 
 		for possibility in self.possibilities:
-			for (c, flags, weight) in iter(possibility):
-				s = possibility.next_state(self.sofar+c, self.probability * weight, (self.generated_upper or possibility.upper), (self.generated_number or flags == NUMBER))
-				yield from iter(s)
+			children = []
+			children = [ iter(possibility.next_state(self.sofar+c, self.probability * weight, (self.generated_upper or possibility.upper), (self.generated_number or flags == NUMBER))) for (c, flags, weight) in iter(possibility) ]
+			yield from uniqify(children)
 
 	def combinations(self, combinations=1, length=0, haveUpper=False, haveNumber=False):
 		if length == PASSWORD_LENGTH:
@@ -146,7 +182,7 @@ def joint_weight(flag, *others):
 			total_matches += 1.0
 		if c.flags == flag:
 			flag_matches += 1.0
-	return flag_matches / total_matches
+	return numpy.float128(flag_matches / total_matches)
 
 class s_first(State):
 	pass
@@ -199,22 +235,25 @@ s_after_double_vowel.possibilities = [
 ]
 
 for s in (s_first, s_after_consonant, s_after_vowel, s_after_double_vowel):
-	assert(sum([p.weight for p in s.possibilities]) == 1.0)
+	assert(str(numpy.array([p.weight for p in s.possibilities], dtype=numpy.float128).sum()) == "1.0")
 	
 if __name__ == "__main__":
 	import sys
 
 	total = sum(s_first().combinations())
 	pct = total // 100
+	THRESHOLD=numpy.float128(1.0/total)
 
 	print("Generating {0:d} phonemes".format(total), file=sys.stderr)
 
+	maxProb = numpy.float128(0.0)
 	count = 0
 	for (x, probability) in iter(s_first()):
 		count += 1
-		print(x + "\t" + str(probability))
+		if probability >= maxProb:
+			print(x + "\t" + str(numpy.uint64((1.0/probability).round())))
+			maxProb = probability
 		if count % pct == 0:
 			print("Generated {0:d} ({1:d}%)...".format(count, count // pct), file=sys.stderr)
 	print("Completed, total={0:d}...".format(count), file=sys.stderr)
-
 

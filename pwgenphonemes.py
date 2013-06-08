@@ -21,7 +21,7 @@ import sys
 import itertools
 import heapq
 
-PASSWORD_LENGTH=5
+PASSWORD_LENGTH=8
 
 CONSONANT = 1
 VOWEL = 2
@@ -104,36 +104,6 @@ class Possibility(object):
 			return 2
 		else:
 			return 1
-
-def merge_and_sort(iterators):
-	ilist = []
-	for it in iterators:
-		try:
-			ilist.append((next(it), it))
-		except StopIteration:
-			pass
-
-	while len(ilist) > 0:
-		ilist.sort(key=operator.itemgetter(0))
-		(item, it) = ilist.pop(-1)
-		yield item
-		try:
-			ilist.append((next(it), it))
-		except StopIteration:
-			pass
-
-def uniqify(iterators):
-	it = merge_and_sort(iterators)
-
-	lastItem = next(it)
-
-	for item in it:
-		if item.password == lastItem.password:
-			lastItem += item
-		else:
-			yield lastItem
-			lastItem = item
-	yield lastItem
 
 class Result(tuple):
 	def __new__(cls, password, probability):

@@ -192,20 +192,23 @@ class s_after_double_vowel(State):
 	pass
 
 s_first.possibilities = [
-	Possibility(VOWEL|DIPTHONG|CONSTNEXT,	joint_weight(VOWEL|DIPTHONG|CONSTNEXT, VOWEL|DIPTHONG, VOWEL) * 0.5 * 0.75, s_after_double_vowel),
-	Possibility(VOWEL,		joint_weight(VOWEL, VOWEL|DIPTHONG, VOWEL|DIPTHONG|CONSTNEXT) * 0.5 * 0.80, s_after_vowel, dipthong_weight=joint_weight(VOWEL|DIPTHONG, VOWEL, VOWEL|DIPTHONG|CONSTNEXT)),
-	Possibility(VOWEL|DIPTHONG|CONSTNEXT,	joint_weight(VOWEL|DIPTHONG|CONSTNEXT, VOWEL|DIPTHONG, VOWEL) * 0.5 * 0.75, s_after_double_vowel, True),
-	Possibility(VOWEL,		joint_weight(VOWEL, VOWEL|DIPTHONG, VOWEL|DIPTHONG|CONSTNEXT) * 0.5 * 0.80, s_after_vowel, True, dipthong_weight=joint_weight(VOWEL|DIPTHONG, VOWEL, VOWEL|DIPTHONG|CONSTNEXT)),
-	Possibility(CONSONANT|DIPTHONG,	joint_weight(CONSONANT|DIPTHONG, CONSONANT) * 0.5 * 0.80, s_after_consonant),
-	Possibility(CONSONANT,		joint_weight(CONSONANT, CONSONANT|DIPTHONG) * 0.5 * 0.80, s_after_consonant),
-	Possibility(CONSONANT|DIPTHONG,	joint_weight(CONSONANT|DIPTHONG, CONSONANT) * 0.5 * 0.20, s_after_consonant, True),
-	Possibility(CONSONANT,		joint_weight(CONSONANT, CONSONANT|DIPTHONG) * 0.5 * 0.20, s_after_consonant, True),
+	Possibility(VOWEL|DIPTHONG|CONSTNEXT,	joint_weight(VOWEL|DIPTHONG|CONSTNEXT, VOWEL|DIPTHONG, VOWEL) * 0.5 * 0.8, s_after_double_vowel),
+	Possibility(VOWEL,			joint_weight(VOWEL, VOWEL|DIPTHONG, VOWEL|DIPTHONG|CONSTNEXT) * 0.5 * 0.8, s_after_vowel,
+						dipthong_weight=joint_weight(VOWEL|DIPTHONG, VOWEL, VOWEL|DIPTHONG|CONSTNEXT) * 0.5 * 0.8),
+	Possibility(VOWEL|DIPTHONG|CONSTNEXT,	joint_weight(VOWEL|DIPTHONG|CONSTNEXT, VOWEL|DIPTHONG, VOWEL) * 0.5 * 0.2, s_after_double_vowel, True),
+	Possibility(VOWEL,			joint_weight(VOWEL, VOWEL|DIPTHONG, VOWEL|DIPTHONG|CONSTNEXT) * 0.5 * 0.2, s_after_vowel, True,
+						dipthong_weight=joint_weight(VOWEL|DIPTHONG, VOWEL, VOWEL|DIPTHONG|CONSTNEXT) * 0.5 * 0.2),
+	Possibility(CONSONANT|DIPTHONG,		joint_weight(CONSONANT|DIPTHONG, CONSONANT) * 0.5 * 0.8, s_after_consonant),
+	Possibility(CONSONANT,			joint_weight(CONSONANT, CONSONANT|DIPTHONG) * 0.5 * 0.8, s_after_consonant),
+	Possibility(CONSONANT|DIPTHONG,		joint_weight(CONSONANT|DIPTHONG, CONSONANT) * 0.5 * 0.2, s_after_consonant, True),
+	Possibility(CONSONANT,			joint_weight(CONSONANT, CONSONANT|DIPTHONG) * 0.5 * 0.2, s_after_consonant, True),
 ]
 
 s_after_consonant.possibilities = [
-	Possibility(NUMBER,		0.3, s_first),
-	Possibility(VOWEL|DIPTHONG|CONSTNEXT,	joint_weight(VOWEL|DIPTHONG|CONSTNEXT, VOWEL, VOWEL|DIPTHONG) * 0.625, s_after_double_vowel),
-	Possibility(VOWEL,		joint_weight(VOWEL, VOWEL|DIPTHONG, VOWEL|DIPTHONG|CONSTNEXT) * 0.7, s_after_vowel, dipthong_weight=joint_weight(VOWEL|DIPTHONG, VOWEL, VOWEL|DIPTHONG|CONSTNEXT)),
+	Possibility(NUMBER,			0.3, s_first),
+	Possibility(VOWEL|DIPTHONG|CONSTNEXT,	joint_weight(VOWEL|DIPTHONG|CONSTNEXT, VOWEL, VOWEL|DIPTHONG) * 0.7, s_after_double_vowel),
+	Possibility(VOWEL,			joint_weight(VOWEL, VOWEL|DIPTHONG, VOWEL|DIPTHONG|CONSTNEXT) * 0.7, s_after_vowel,
+						dipthong_weight=joint_weight(VOWEL|DIPTHONG, VOWEL, VOWEL|DIPTHONG|CONSTNEXT) * 0.7),
 ]
 
 s_after_vowel.possibilities = [

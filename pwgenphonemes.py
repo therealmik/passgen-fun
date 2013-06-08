@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/pypy
 
 """
 Generate all possible pwgen phonemes (the default mode)
@@ -16,10 +16,11 @@ from __future__ import print_function
 from __future__ import division
 
 import operator
-import numpy
 import sys
 import itertools
-import heapq
+
+if sys.version_info[0] >= 3:
+	long = int
 
 PASSWORD_LENGTH=8
 
@@ -85,7 +86,7 @@ class Possibility(object):
 	def __init__(self, flags, weight, next_state, upper=False, dipthong_weight=None):
 		self.flags = flags
 		self.items = [ item for item in charset if item.flags == self.flags ]
-		self.weight = numpy.float128(weight)
+		self.weight = weight
 		self.itemWeight = self.weight / len(self.items)
 		self.next_state = next_state
 		self.upper = upper
@@ -98,6 +99,13 @@ class Possibility(object):
 				c = c.capitalize()
 			yield (c, item.flags, self.itemWeight)
 		
+	@property
+	def total_weight(self):
+		if self.dipthong_weight is None:
+			return self.weight
+		else:
+			return self.weight + self.dipthong_weight
+
 	@property
 	def numchars(self):
 		if self.flags & DIPTHONG != 0:
@@ -112,6 +120,18 @@ class Result(tuple):
 	password = property(operator.itemgetter(0))
 	probability = property(operator.itemgetter(1))
 
+	def __lt__(self, other):
+		return self.probability < other.probability
+
+	def __le__(self, other):
+		return self.probability <= other.probability
+
+	def __gt__(self, other):
+		return self.probability > other.probability
+
+	def __ge__(self, other):
+		return self.probability >= other.probability
+
 class State(object):
 	def generate(self, gen_length, sofar="", probability=1.0, generated_upper=False, generated_number=False, dipthong_boost=None):
 		"""Recursively generate all possibly passwords that are gen_length long"""
@@ -123,25 +143,30 @@ class State(object):
 		if len(sofar) > gen_length:
 			return
 
-		for possibility in self.possibilities:
-			next_dipthong_boost = None
-			if possibility.dipthong_weight is not None:
-				next_dipthong_boost = probability * possibility.dipthong_weight
-			for (c, flags, weight) in iter(possibility):
-				p = probability * weight
-				if dipthong_boost is not None:
-					dipthong_candidate = sofar[-1].lower() + c
-					matches = [ csi for csi in charset if csi.c == dipthong_candidate and flags & CONSTNEXT == 0 ]
-					if len(matches) > 0:
-						p += dipthong_boost
-				yield from possibility.next_state().generate(
-					gen_length,
-					sofar+c,
-					probability * weight,
-					(generated_upper or possibility.upper),
-					(generated_number or flags == NUMBER),
-					next_dipthong_boost
-				)
+		lastchar = sofar[-1:].lower()
+		def dipthong_extra(c, flags):
+			if dipthong_boost is None:
+				return 0
+			dipthong_candidate = lastchar + c
+			matches = [ csi for csi in charset if csi.c == dipthong_candidate and flags & CONSTNEXT == 0 ]
+			if len(matches) > 0:
+				 return dipthong_boost
+			return 0
+			
+		for gen in (
+			possibility.next_state().generate(
+				gen_length,
+				sofar+c,
+				(probability * weight) + dipthong_extra(c, flags),
+				(generated_upper or possibility.upper),
+				(generated_number or flags == NUMBER),
+				possibility.dipthong_weight is None or probability * possibility.dipthong_weight
+			)
+			for possibility in self.possibilities
+			for (c, flags, weight) in iter(possibility)
+		):
+			for result in gen:
+				yield result
 
 	def combinations(self, length, combinations=1, haveUpper=False, haveNumber=False):
 		"""Calculate the total number of possible passwords that can be generated."""
@@ -156,8 +181,8 @@ class State(object):
 			yield 0
 			return
 
-		yield from (
-			combinations * sum(
+		for p in self.possibilities:
+			yield combinations * sum(
 				p.next_state().combinations(
 					length - p.numchars,
 					len(list(iter(p))),
@@ -165,8 +190,6 @@ class State(object):
 					haveNumber or p.flags == NUMBER
 				)
 			)
-			for p in self.possibilities
-		)
 
 def joint_weight(flag, *others):
 	total_matches = 0.0
@@ -177,7 +200,7 @@ def joint_weight(flag, *others):
 			total_matches += 1.0
 		if c.flags == flag:
 			flag_matches += 1.0
-	return numpy.float128(flag_matches / total_matches)
+	return flag_matches / total_matches
 
 class s_first(State):
 	pass
@@ -233,10 +256,11 @@ s_after_double_vowel.possibilities = [
 ]
 
 ## Check that no easily-spotted mistakes were made in probabilities
-#for s in (s_first, s_after_consonant, s_after_vowel, s_after_double_vowel):
-	#total_weight = numpy.array([p.weight for p in s.possibilities], dtype=numpy.float128).sum()
-	# print(s.__name__ + ": " + str(total_weight), file=sys.stderr)
-	#assert(str(total_weight) == "1.0")
+for s in (s_first, s_after_consonant, s_after_vowel, s_after_double_vowel):
+	s.possibilities.sort(key=operator.attrgetter("total_weight"), reverse=True)
+	#total_weight = sum([p.total_weight for p in s.possibilities])
+	#print(s.__name__ + ": " + str(total_weight), file=sys.stderr)
+	#assert(total_weight == 1.0)
 	
 def generate_all():
 	total = sum(s_first().combinations(PASSWORD_LENGTH))
@@ -245,15 +269,15 @@ def generate_all():
 	print("Generating {0:d} phonemes".format(total), file=sys.stderr)
 
 	count = 0
-	maxProb = numpy.float128(0)
+	maxProb = 0.0
 
 	try:
 		for result in s_first().generate(PASSWORD_LENGTH):
 			count += 1
 			maxProb = max(maxProb, result.probability)
-			print(result.password + "\t" + str(numpy.uint64(numpy.reciprocal(result.probability).round())))
+			print(result.password + "\t" + str(long(1.0 / result.probability)))
 			if count % pct == 0:
-				print("Generated {0:d} ({1:d}%) - Max prob: {2:d}...".format(count, count // pct, int(numpy.reciprocal(maxProb).round())), file=sys.stderr)
+				print("Generated {0:d} ({1:d}%) - Max prob: {2:d}...".format(count, count // pct, long(1.0/maxProb)), file=sys.stderr)
 		print("Completed, total={0:d}.".format(count), file=sys.stderr)
 	except KeyboardInterrupt:
 		print("Cancelled, total={0:d}.".format(count), file=sys.stderr)

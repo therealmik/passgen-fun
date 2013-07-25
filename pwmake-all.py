@@ -44,6 +44,12 @@ if __name__ == "__main__":
 		print("Usage:", sys.argv[0], "<bits>")
 		sys.exit(1)
 
+	bits = int(sys.argv[1])
+	if bits < 56:
+		print("WARNING: pwmake rounds up to 56 bits when you ask for less", file=sys.stderr)
+	elif bits > 256:
+		print("WARNING: pwmake rounds down to 256 bits when you ask for more", file=sys.stderr)
+	
 	for pw in generate_pwmake_state0(int(sys.argv[1])):
 		print(pw)
 

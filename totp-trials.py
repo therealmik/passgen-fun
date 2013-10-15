@@ -112,14 +112,16 @@ def make_keys():
 
 def run_attack(i):
 	KEYS = make_keys()
-	return (i, ( attack_simple(KEYS), attack_drift(KEYS), attack_3_guesses(KEYS), attack_over_time(KEYS) ))
+	results = [ attack_simple(KEYS), attack_drift(KEYS), attack_3_guesses(KEYS), attack_over_time(KEYS) ]
+	results.append(numpy.sum(numpy.arange(results[3]) * 5))
+	return (i, results)
 
 if __name__ == "__main__":
-	results = numpy.empty((NUM_TRIALS, 4), dtype=numpy.uint32)
+	results = numpy.empty((NUM_TRIALS, 5), dtype=numpy.uint64)
 	p = Pool()
 
 	for i, result in p.map(run_attack, range(NUM_TRIALS)):
-		for j in range(4):
+		for j in range(5):
 			results[i, j] = result[j]
 	numpy.savetxt("totp-trials.csv", results, fmt="%d", delimiter=",")
 

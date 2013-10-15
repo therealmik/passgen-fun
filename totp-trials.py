@@ -92,19 +92,20 @@ def attack_3_guesses(KEYS):
 				break
 	return breaks
 
-def attack_over_time(KEYS):
+def attack_over_time(KEYS, num_users=1):
 	"""See how many tries before we get into 1 account - 1 try per time interval.
 	   We change n each time to benefit from the drift check"""
 	i = 0
 	tries = 0
-	n = 123456
+	N = numpy.random.randint(0, 483647, num_users)
 	c = get_c()
 	while True:
 		tries += 1
-		if validate_drift(KEYS, c, i, n):
-			break
+		for n in N:
+			if validate_drift(KEYS, c, i, n):
+				break
 		c += 1
-		n = (n + 1) % 483648
+		N = (N + 1) % 483647
 	return tries
 
 def make_keys():
@@ -112,16 +113,17 @@ def make_keys():
 
 def run_attack(i):
 	KEYS = make_keys()
-	results = [ attack_simple(KEYS), attack_drift(KEYS), attack_3_guesses(KEYS), attack_over_time(KEYS) ]
+	results = [ attack_simple(KEYS), attack_drift(KEYS), attack_3_guesses(KEYS), attack_over_time(KEYS, 1), attack_over_time(KEYS, 10) ]
 	results.append(numpy.sum(numpy.arange(results[3]) * 5))
+	results.append(numpy.sum(numpy.arange(results[4]) * 5))
 	return (i, results)
 
 if __name__ == "__main__":
-	results = numpy.empty((NUM_TRIALS, 5), dtype=numpy.uint64)
+	results = numpy.empty((NUM_TRIALS, 7), dtype=numpy.uint64)
 	p = Pool()
 
 	for i, result in p.map(run_attack, range(NUM_TRIALS)):
-		for j in range(5):
+		for j in range(7):
 			results[i, j] = result[j]
 	numpy.savetxt("totp-trials.csv", results, fmt="%d", delimiter=",")
 

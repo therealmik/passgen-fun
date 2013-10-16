@@ -21,10 +21,11 @@ import os
 import time
 import hashlib
 import hmac
+import sys
 from multiprocessing import Pool
 
-NUM_TRIALS=64
-NUM_KEYS=1000000
+NUM_TRIALS=16
+NUM_USERS=[ 1, 10, 100, 1000, 5000, 10000, 15000, 20000 ]
 
 def DT(value):
 	"""Use the last byte % 16 to determine which 4 bytes
@@ -34,20 +35,21 @@ def DT(value):
 
 def hotp(k, c):
 	"""x := HMAC-k(c) ; return DT(x) mod 1000000"""
-	mac = hmac.new(k, c.to_bytes(8, "big"), digestmod=hashlib.sha1)
+	mac = k.copy()
+	mac.update(c.to_bytes(8, "big"))
 	return DT(mac.digest()) % 1000000
 
-def validate_simple(KEYS, c, i, n):
+def validate_simple(user, c, n):
 	"""Just see if the HOTP matches"""
-	return n == hotp(KEYS[i], c)
+	return n == hotp(user, c)
 
-def validate_drift(KEYS, c, i, n):
+def validate_drift(user, c, n):
 	"""Accept c-1 and c-2 too"""
-	if n == hotp(KEYS[i], c):
+	if n == hotp(user, c):
 		return True
-	elif n == hotp(KEYS[i], c):
+	elif n == hotp(user, c-1):
 		return True
-	elif n == hotp(KEYS[i], c):
+	elif n == hotp(user, c-2):
 		return True
 	else:
 		return False
@@ -56,74 +58,57 @@ def get_c():
 	"""Return a counter value"""
 	return int(time.time()) // 30
 
-def attack_simple(KEYS):
+def make_keys(num_users):
+	return [ hmac.new(os.urandom(16), digestmod=hashlib.sha1) for _ in range(num_users) ]
+
+def attack_simple(users):
 	"""Try guessing a random value for 1m accounts"""
 	n = 123456
 	breaks = 0
 
 	c = get_c()
-	for i in range(NUM_KEYS):
-		if validate_simple(KEYS, c, i, n):
+	for user in users:
+		if validate_simple(user, c, n):
 			breaks += 1
 	return breaks
 	
 
-def attack_drift(KEYS):
+def attack_drift(users):
 	"""Try guessing a random value for 1m accounts on a server that accounts for drift"""
 	n = 123456
 	breaks = 0
 
 	c = get_c()
-	for i in range(NUM_KEYS):
-		if validate_drift(KEYS, c, i, n):
+	for user in users:
+		if validate_drift(user, c, n):
 			breaks += 1
 	return breaks
 
-def attack_3_guesses(KEYS):
-	"""Same as attack_drift, but have 3 guesses"""
-	N = [ 123456, 234567, 3456 ]
-	breaks = 0
-
-	c = get_c()
-	for i in range(NUM_KEYS):
-		for n in N:
-			if validate_drift(KEYS, c, i, n):
-				breaks += 1
-				break
-	return breaks
-
-def attack_over_time(KEYS, num_users=1):
-	"""See how many tries before we get into 1 account - 1 try per time interval.
-	   We change n each time to benefit from the drift check"""
+def attack_until_win(users):
+	"""See how many tries before we get into 1 account, taking into account
+	   the recommended backoffs in RFC4226"""
 	i = 0
 	tries = 0
-	N = numpy.random.randint(0, 483647, num_users)
+	n = 123456
 	c = get_c()
+
 	while True:
 		tries += 1
-		for n in N:
-			if validate_drift(KEYS, c, i, n):
-				break
-		c += 1
-		N = (N + 1) % 483647
-	return tries
+		for user in users:
+			if validate_drift(user, c, n):
+				return tries
+		c += (tries * 5) // 30
+		n = (n + 1) % 483647 # Change n to benefit from drift
 
-def make_keys():
-	return [ os.urandom(16) for _ in range(NUM_KEYS) ]
-
-def run_attack(i):
-	KEYS = make_keys()
-	results = [ attack_simple(KEYS), attack_drift(KEYS), attack_3_guesses(KEYS), attack_over_time(KEYS, 1), attack_over_time(KEYS, 10) ]
-	results.append(numpy.sum(numpy.arange(results[3]) * 5))
-	results.append(numpy.sum(numpy.arange(results[4]) * 5))
-	return (i, results)
+def run_attack(_x):
+	return [ attack_until_win(make_keys(num_users)) for num_users in NUM_USERS ]
 
 if __name__ == "__main__":
-	results = numpy.empty((NUM_TRIALS, 7), dtype=numpy.uint64)
+	results = numpy.empty((NUM_TRIALS, len(NUM_USERS)), dtype=numpy.uint64)
 	p = Pool()
 
-	for i, result in p.map(run_attack, range(NUM_TRIALS)):
-		for j in range(7):
-			results[i, j] = result[j]
-	numpy.savetxt("totp-trials.csv", results, fmt="%d", delimiter=",")
+	for i, result in enumerate(p.map(run_attack, range(NUM_TRIALS))):
+		for j in range(len(result)):
+			results[i,j] = result[j]
+	numpy.savetxt("totp-trials.csv", results.T, fmt="%d", delimiter=",")
 

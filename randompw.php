@@ -44,7 +44,7 @@ function secure_rand($min, $max) {
 	if($min > $max) {
 		$tmp = $max;
 		$max = $min;
-		$min = $max;
+		$min = $tmp;
 	}
 
 	$real_max = $max - $min;

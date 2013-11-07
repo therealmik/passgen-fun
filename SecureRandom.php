@@ -1,5 +1,26 @@
 <?php
 
+/* SecureRandom wrapper for PHP5
+ * Public Domain 2013, Michael Samuel
+ *
+ * This library is a small wrapper around the available
+ * CSPRNG sources available to PHP apps.
+ *
+ * I have refrained from implementing any custom sources
+ * based on builtin functions (such as md5) as it would
+ * be vastly lower quality (and probably slower).
+ *
+ * That being said, there is no sane reason for all of
+ * these PRNGs to be unavailable - such an environment
+ * would be far too broken.
+ *
+ * Basic usage:
+ * $rng = secure_random_factory();
+ * $number = $rng->rand(5, 10); // Pick a number in the range [5..10]
+ * $char = $rng->choose("abcdefg");
+ * $item = $rng->choose(array("Dog", "Cat", "Bird", "Rock"));
+ */
+
 abstract class SecureRandom {
 	abstract public function get_random_bytes($count);
 	abstract public static function is_available();

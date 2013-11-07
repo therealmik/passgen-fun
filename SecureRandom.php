@@ -137,12 +137,21 @@ function secure_random_factory()
 	throw new Exception("Unable to find secure entropy source");
 }
 
-/* Statistical tests
-$rand = secure_random_factory();
-$test_arry = array(0,1,2,3,4,5,6,7,8,9);
-for($i = 0; $i < 1000000; $i++) {
-	print($rand->choose($test_arry) . "\n");
+function secure_random_tests()
+{
+	$rand = secure_random_factory();
+	$results = array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+	for($i = 0; $i < 10000000; $i++) {
+		$results[$rand->rand(count($results)-1)]++;
+	}
+	print_r($results);
 }
+		
+/* Statistical tests - Uncomment and run with php5-cli to test your platform
+
+secure_random_tests();
+
  */
 
 ?>

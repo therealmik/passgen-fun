@@ -10,9 +10,10 @@
  * based on builtin functions (such as md5) as it would
  * be vastly lower quality (and probably slower).
  *
- * That being said, there is no sane reason for all of
- * these PRNGs to be unavailable - such an environment
- * would be far too broken.
+ * An environment that lacks all of these entropy sources
+ * is very unlikely to be able to achive a reasonable
+ * level of security in any case.  Better that they realise
+ * that before somebody else does.
  *
  * Basic usage:
  * $rng = secure_random_factory();

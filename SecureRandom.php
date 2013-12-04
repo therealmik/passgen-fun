@@ -76,6 +76,7 @@ class DevURandom extends SecureRandom {
 	public function DevURandom($filename="/dev/urandom")
 	{
 		$this->fh = fopen("/dev/urandom", "rb");
+		stream_set_read_buffer($this->fh, 0);
 	}
 
 	public function get_random_bytes($count)
